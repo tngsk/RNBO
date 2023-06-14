@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- weprobe template v0.1 -->
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/jspsych@7.2.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-browser-check@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.1"></script>
+    <!-- <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@1.1.1"></script> -->
+    <script src="https://unpkg.com/@jspsych/plugin-image-button-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1.1.2"></script>
+
+
+    <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.1"></script>
+    <link href="https://unpkg.com/jspsych@7.2.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+
+    <!-- <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script> -->
+    <script type="text/javascript" src="https://cdn.cycling74.com/rnbo/latest/rnbo.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
+
+    <!-- WeProbe Common File -->
+    <script src="../js/wp-util.js"></script>
+    <!-- <script src="../js/audio.js"></script> -->
+    <link href="../css/style.css" rel="stylesheet" type="text/css" />
+
+    <style>
+        .slider {
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background-color: lightgray;
+            height: 15px;
+            border-radius: 5px;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="console"></div>
+    <div class="slidecontainer">
+        <input id="freq" class="slider" max="8000" min="0" oninput="sliderUpdate(this)" type="range" value="250">
+    </div>
+    <div id="experiment_container"></div>
+
+
+    <script>
+
+        // RNBO
+        let WAContext = window.AudioContext || window.webkitAudioContext;
+        let context = new WAContext();
+        const gainNode = context.createGain();
+        gainNode.connect(context.destination);
+
+        const bang1 = new RNBO.MessageEvent(RNBO.TimeNow, "in1", [1]);
+        const bang0 = new RNBO.MessageEvent(RNBO.TimeNow, "in1", [0]);
+
+        // create device
+        let device;
+        let freq;
+        let duration;
+        const setup = async () => {
+            let rawPatcher = await fetch("weprobe.test_signal.export.json");
+            let patcher = await rawPatcher.json();
+            device = await RNBO.createDevice({ context, patcher });
+            device.node.connect(gainNode);
+            // device.node.connect(context.destination);
+
+            freq = device.parametersById.get("freq");
+        };
+
+        setup();
+
+
+
+        // Slider Update
+        let current_sliderValue = 0;
+        const sliderUpdate = (element) => {
+            current_sliderValue = parseInt(element.value);
+            console.log(current_sliderValue);
+            freq.value = current_sliderValue;
+        }
+
+        // Slider Update
+        let current_buttonStatus = false;
+        const buttonUpdate = () => {
+            current_buttonStatus = !current_buttonStatus;
+            console.log(current_buttonStatus);
+            if (current_buttonStatus) {
+                // lfo1.connect(noise.volume);
+            } else {
+                // lfo1.disconnect(noise.volume);
+            }
+        }
+
+
+        // Main
+        const jsPsych = initJsPsych({
+            // display_element: "experiment_container",
+            on_finish: () => {
+                jsPsych.data.displayData();
+            },
+        });
+
+        let timeline = [];
+
+        const slider = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+
+                device.scheduleEvent(bang1);
+
+                return `<div class="slidecontainer"><input class="slider" min="0" max="8000" oninput="sliderUpdate(this)" type="range" value="250"><input type="button" onclick="buttonUpdate(this)"></div>`;
+            },
+            choices: ["OK"],
+            data: {
+                task: "slider",
+            },
+            on_finish: (data) => {
+                data.response = current_sliderValue;
+                device.scheduleEvent(bang0);
+            }
+        };
+
+        const start_audio = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+                return `push to start`;
+            },
+            choices: ["OK"],
+            data: {
+                task: "start_audio",
+            },
+            on_finish: (data) => {
+                context.resume();
+            }
+        };
+
+        timeline.push(start_audio);
+        timeline.push(slider)
+        jsPsych.run(timeline);
+
+    </script>
+</body>
+
+</html>

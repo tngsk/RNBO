@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- weprobe template v0.1 -->
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/jspsych@7.2.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-browser-check@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.1"></script>
+    <!-- <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@1.1.1"></script> -->
+    <script src="https://unpkg.com/@jspsych/plugin-image-button-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1.1.2"></script>
+
+
+    <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.1"></script>
+    <link href="https://unpkg.com/jspsych@7.2.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+
+    <!-- <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script> -->
+    <script type="text/javascript" src="https://cdn.cycling74.com/rnbo/latest/rnbo.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
+
+    <!-- WeProbe Common File -->
+    <script src="../js/wp-util.js"></script>
+    <!-- <script src="../js/audio.js"></script> -->
+    <link href="../css/style.css" rel="stylesheet" type="text/css" />
+
+    <style>
+        #meter1 {
+            width: 100%;
+            height: 50px;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="console"></div>
+    <meter id="meter1" min="-90" max="0" value="-90"></meter>
+    <div id="experiment_container"></div>
+
+    <script>
+
+        // RNBO
+        let WAContext = window.AudioContext || window.webkitAudioContext;
+        let context = new WAContext();
+
+        // create device
+        let device;
+        let stream;
+        let current_input_level = [];
+        const setup = async () => {
+            let rawPatcher = await fetch("weprobe.input_level_report.export.json");
+            let patcher = await rawPatcher.json();
+            device = await RNBO.createDevice({ context, patcher });
+
+            navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                .then((_stream) => {
+                    stream = _stream;
+                    const UserMediaSource = context.createMediaStreamSource(stream);
+                    UserMediaSource.connect(device.node);
+                });
+
+            device.parametersById.get("report").value = 0;
+            // device.parametersById.get("report_interval").value = 10;
+            device.messageEvent.subscribe((ev) => {
+                switch (ev.tag) {
+                    case "out2":
+                        document.getElementById("meter1").value = ev.payload;
+                        current_input_level.push(ev.payload);
+                        break;
+                    default:
+                        break;
+                }
+            })
+        };
+
+        setup();
+
+
+        // Main
+        const jsPsych = initJsPsych({
+            display_element: "experiment_container",
+            on_finish: () => {
+                jsPsych.data.displayData();
+            },
+        });
+
+        let timeline = [];
+
+        const start_audio = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+                return `push to start`;
+            },
+            choices: ["OK"],
+            data: {
+                task: "start_audio",
+            },
+            on_finish: (data) => {
+                context.resume();
+            }
+        };
+
+        const input_level = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+                device.parametersById.get("report").value = 1;
+                return "";
+            },
+            choices: ["OK"],
+            data: {
+                task: "input_level",
+            },
+            on_finish: (data) => {
+                stream.getTracks().forEach(track => track.stop());
+                device.parametersById.get("report").value = 0;
+                data.response = current_input_level;
+                data.input_average = arrayMean(current_input_level);
+            }
+        };
+
+        timeline.push(start_audio);
+        timeline.push(input_level);
+        jsPsych.run(timeline);
+
+    </script>
+</body>
+
+</html>

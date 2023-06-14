@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- weprobe template v0.1 -->
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/jspsych@7.2.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-browser-check@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.1"></script>
+    <!-- <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@1.1.1"></script> -->
+    <script src="https://unpkg.com/@jspsych/plugin-image-button-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-initialize-microphone@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-audio-response@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1.1.2"></script>
+
+
+    <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.1"></script>
+    <link href="https://unpkg.com/jspsych@7.2.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+
+    <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
+
+    <!-- WeProbe Common File -->
+    <script src="../js/wp-util.js"></script>
+    <script src="../js/audio.js"></script>
+    <link href="../css/style.css" rel="stylesheet" type="text/css" />
+
+    <style>
+        .slider {
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background-color: lightgray;
+            height: 15px;
+            border-radius: 5px;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="console"></div>
+    <div class="slidecontainer">
+        <input class="slider" max="-12" min="-90" oninput="sliderUpdate(this.value)" type="range" value="-12">
+    </div>
+    <div id="experiment_container"></div>
+
+
+    <script>
+
+        // Slider Update
+        let current_sliderValue = 0;
+        const sliderUpdate = (value) => {
+            current_sliderValue = parseInt(value);
+            console.log(current_sliderValue);
+            fader1.volume.value = current_sliderValue;
+        }
+
+        // Slider Update
+        let current_buttonStatus = false;
+        const buttonUpdate = () => {
+            current_buttonStatus = !current_buttonStatus;
+            console.log(current_buttonStatus);
+            if (current_buttonStatus) {
+                lfo1.connect(noise.volume);
+            } else {
+                lfo1.disconnect(noise.volume);
+            }
+        }
+
+
+        //Tone.js
+
+        const signal = new Tone.Sequence(
+            (time, freq) => {
+                synth.triggerAttackRelease(freq, "16n", time);
+            },
+            [250, null]
+        ).start();
+
+        const masker = new Tone.Sequence(
+            (time, note) => {
+                noise.triggerAttackRelease("16n", time);
+            }, ['', null]).start();
+
+        // Main
+        const jsPsych = initJsPsych({
+            // display_element: "experiment_container",
+            on_finish: () => {
+                jsPsych.data.displayData();
+            },
+        });
+
+        let timeline = [];
+
+        const slider = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+                return `
+
+                <div class="slidecontainer">
+                    <input class="slider" max="-6" min="-90" oninput="sliderUpdate(this.value)" type="range" value="-12">
+                    <input type="button" onclick="buttonUpdate(this.value)">
+                </div>
+
+                `;
+            },
+            choices: ["OK"],
+            data: {
+                task: "slider",
+            },
+            on_finish: (data) => {
+                data.response = current_sliderValue;
+                Tone.Transport.stop();
+            }
+        };
+
+        const slider_plugin = {
+            type: jsPsychHtmlSliderResponse,
+            stimulus: 'volume',
+            require_movement: true,
+            min: -90,
+            max: 0,
+            slider_start: 0,
+            button_label: 'next',
+            labels: ['-90', '0']
+        }
+
+        const start_audio = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: () => {
+                return `push to start`;
+            },
+            choices: ["OK"],
+            data: {
+                task: "start_audio",
+            },
+            on_finish: (data) => {
+                Tone.start();
+                Tone.Transport.bpm.value = 120;
+                Tone.Transport.start();
+            }
+        };
+
+        timeline.push(start_audio);
+        timeline.push(slider)
+        timeline.push(slider_plugin)
+        jsPsych.run(timeline);
+
+    </script>
+</body>
+
+</html>
